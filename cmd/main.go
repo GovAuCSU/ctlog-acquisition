@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +17,7 @@ import (
 )
 
 const PAGESIZE = 300
+const CONFIGFILE = "config.json"
 
 // WriteChanToWriter will read strings from channel c and write to Writer w.
 func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
@@ -33,11 +36,74 @@ func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
 	}
 }
 
-func Scheduler(ctx context.Context, filepath string, delay time.Duration) chan bool {
+// Using this struct to send comm between goroutines to get/update endpoint configurations
+// The go routine send a request along with a reply channel so our ManageConfig routine know
+// how to reply
+type ConfigComm struct {
+	query string
+	reply chan ctl.Endpoint
+}
+
+type Configuration struct {
+	Endpoints map[string]ctl.Endpoint
+}
+
+type ConfigChannel struct {
+	request chan *ConfigComm
+	update  chan *ctl.Endpoint
+}
+
+func loadConfig(filename string) *Configuration {
+	// If no configuration is found, return empty config
+	if _, err := os.Stat("filename"); os.IsNotExist(err) {
+		return &Configuration{
+			Endpoints: make(map[string]ctl.Endpoint),
+		}
+	}
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Println("Exiting app due to Error in reading configuration file.")
+		panic(err)
+	}
+
+	var c Configuration
+	err = json.Unmarshal(bytes, &c)
+	if err != nil {
+		log.Println("Exiting app due to corrupted configuration file.")
+		panic(err)
+	}
+
+	return &c
+}
+
+func saveConfig(c Configuration, filename string) error {
+	bytes, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(filename, bytes, 0644)
+}
+
+func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
+	conf := loadConfig(CONFIGFILE)
+	// Load config
+	for {
+		select {
+		case req := <-comm.request:
+			req.reply <- conf.Endpoints[req.query]
+		case u := <-comm.update:
+			conf.Endpoints[u.Url] = *u
+			saveConfig(*conf, CONFIGFILE)
+		}
+	}
+}
+
+func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) chan bool {
 	stop := make(chan bool)
 	go func() {
 		for {
-			GetLogToFile(ctx, filepath)
+			GetLogToFile(ctx, confcomm, filepath)
 			stop := make(chan bool)
 			select {
 			case <-time.After(delay):
@@ -49,17 +115,17 @@ func Scheduler(ctx context.Context, filepath string, delay time.Duration) chan b
 	return stop
 }
 
-func GetLogToFile(ctx context.Context, filepath string) {
+func GetLogToFile(ctx context.Context, confcomm ConfigChannel, filepath string) {
 	start := 1000
 	end := 2000
-	err := RealGetLogToFile(ctx, start, end, filepath)
+	err := RealGetLogToFile(ctx, confcomm, start, end, filepath)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 }
 
-func RealGetLogToFile(ctx context.Context, start, end int, folderpath string) error {
+func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end int, folderpath string) error {
 	// -----------
 	t := time.Now()
 	log.Println("[INFO] Preparing our output file")
@@ -79,19 +145,17 @@ func RealGetLogToFile(ctx context.Context, start, end int, folderpath string) er
 	}
 	_ = ctlist
 	var wg sync.WaitGroup
+
 	for _, l := range ctlist.Logs {
 		wg.Add(1)
-		go GetLog(msg, l.Url, start, end, &wg)
+		go GetLog(msg, confcomm, l.Url, start, end, &wg)
 	}
-	//Getting from a single server
-	// wg.Add(1)
-	// go GetLog(msg, "ct.googleapis.com/daedalus/", start, end, &wg)
 
 	wg.Wait()
 	return nil
 }
 
-func GetLog(message chan string, url string, start, end int, wg *sync.WaitGroup) {
+func GetLog(message chan string, confcomm ConfigChannel, url string, start, end int, wg *sync.WaitGroup) {
 	log.Printf("[INFO] Starting request for %s\n", url)
 	defer wg.Done()
 	ep, err := ctl.Newendpoint(url)
@@ -99,10 +163,23 @@ func GetLog(message chan string, url string, start, end int, wg *sync.WaitGroup)
 		log.Printf("[DEBUG] %s\n%v", url, err)
 		return
 	}
-	err = ep.StreamLog(message, start, end, PAGESIZE)
-	if err != nil {
-		log.Println(err)
+
+	comm := &ConfigComm{
+		query: ep.Url,
+		reply: make(chan ctl.Endpoint),
 	}
+	confcomm.request <- comm
+	epconf := <-comm.reply
+
+	if epconf.Tree_size < ep.Tree_size {
+		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size, PAGESIZE)
+		if err != nil {
+			log.Println(err)
+		}
+		ep.Tree_size = epconf.Tree_size + sum
+
+	}
+	confcomm.update <- ep
 	log.Printf("[INFO] Closing goroutine for %s\n", url)
 
 }
@@ -121,7 +198,14 @@ func realmain() error {
 	// defering canclation of all concurence processes
 	defer cancel()
 	os.MkdirAll(localpath, os.ModePerm)
-	stopLog := Scheduler(ctx, localpath, 300*time.Second)
+	confcomm := ConfigChannel{
+		request: make(chan *ConfigComm),
+		update:  make(chan *ctl.Endpoint),
+	}
+
+	go ManageConfiguration(ctx, confcomm)
+
+	stopLog := Scheduler(ctx, confcomm, localpath, 300*time.Second)
 
 	fs := http.FileServer(http.Dir(localpath))
 	http.Handle("/", fs)

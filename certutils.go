@@ -7,9 +7,9 @@ import (
 	ct "github.com/google/certificate-transparency-go"
 	"github.com/google/certificate-transparency-go/tls"
 	"github.com/google/certificate-transparency-go/x509"
-	// Think about using standard library
 )
 
+// getDomainFromLeaf read the base64 encoded leaf_entry coming from CT log server and decode+extract CN and SNA from it
 func getDomainFromLeaf(leafentrystr string) ([]string, error) {
 	leafentry, err := base64.StdEncoding.DecodeString(leafentrystr)
 	if err != nil {
@@ -31,20 +31,10 @@ func getDomainFromLeaf(leafentrystr string) ([]string, error) {
 			return nil, err
 		}
 	}
-	// return x509cert
-	// Adding commonname as well. Forget duplication
-	// count, _ := x509util.OIDInExtensions(x509.OIDExtensionSubjectAltName, x509cert.Extensions)
-	// if count > 0 {
-	var str []string
+	var domainlist []string
 	for _, name := range x509cert.DNSNames {
-		str = append(str, name)
+		domainlist = append(domainlist, name)
 	}
-	return str, nil
-}
-
-// This will cause program to exit...
-func paniciferr(err error) {
-	if err != nil {
-		panic(err)
-	}
+	domainlist = append(domainlist, x509cert.Subject.CommonName)
+	return domainlist, nil
 }

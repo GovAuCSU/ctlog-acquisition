@@ -43,7 +43,7 @@ func GetListCT() (*ctlist, error) {
 	}
 	resp, err := httpclient.Get(url)
 	if err != nil {
-		paniciferr(err)
+		return nil, err
 	}
 
 	defer resp.Body.Close()
@@ -52,7 +52,7 @@ func GetListCT() (*ctlist, error) {
 	var list ctlist
 	json.Unmarshal([]byte(body), &list)
 	if err != nil {
-		paniciferr(err)
+		return nil, err
 	}
 
 	return &list, nil
