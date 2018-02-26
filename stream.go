@@ -91,9 +91,11 @@ func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (in
 		return 0, fmt.Errorf("[DEBUG] Empty data for %s", ep.Downloadurl)
 	}
 	for _, leaf := range leaves.Entries {
-		domainlist, err := getDomainFromLeaf(leaf.Leaf_input)
+		domainlist, _ := getDomainFromLeaf(leaf.Leaf_input)
 		if err != nil {
-			return 0, err
+			// Ignore error so we can continue with the next leaf
+			continue
+			//return 0, err
 		}
 		for _, s := range domainlist {
 			message <- s
@@ -106,7 +108,7 @@ func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (in
 		log.Printf("[WARN] Getting more log from %s:%d --> %d with pagesize %d\n", ep.Downloadurl, start+responselength, end, responselength)
 		s, err := ep.StreamLog(message, start+responselength, end, responselength)
 		if err != nil {
-			return 0, err
+			return sumrecord, err
 		}
 		sumrecord = sumrecord + s
 	}
