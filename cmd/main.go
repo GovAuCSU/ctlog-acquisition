@@ -126,6 +126,10 @@ func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, del
 		if *onePass {
 			return
 		}
+
+		// At this point the config values should be set correctly. Setting
+		// startCurrent to false will stop this from happening every loop.
+		*startCurrent = false
 		select {
 		case <-time.After(delay):
 		}
