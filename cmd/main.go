@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,8 +17,22 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
+const listenPort = ":3000"
 const PAGESIZE = 300
 const CONFIGFILE = "config.json"
+
+var disableWebServer *bool
+
+func usage() {
+	fmt.Println("Usage: " + os.Args[0] + " [options]")
+	fmt.Println("")
+	fmt.Println("Connects to public CT logs, downloads records, and extracts potential hostnames.")
+	fmt.Println("")
+	fmt.Println("Results are accessible via the file system or a built-in web server on port " + listenPort)
+	fmt.Println("")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
+}
 
 // WriteChanToWriter will read strings from channel c and write to Writer w.
 func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
@@ -208,17 +223,27 @@ func realmain() error {
 
 	stopLog := Scheduler(ctx, confcomm, localpath, 300*time.Second)
 
-	fs := http.FileServer(http.Dir(localpath))
-	http.Handle("/", fs)
+	if !*disableWebServer {
+		fs := http.FileServer(http.Dir(localpath))
+		http.Handle("/", fs)
 
-	log.Println("[INFO] Listening...")
-	http.ListenAndServe(":3000", nil)
+		log.Printf("[INFO] Listening on port %v", listenPort)
+		http.ListenAndServe(listenPort, nil)
+	} else {
+		log.Println("[INFO] Webserver disabled.")
+	}
 	stopLog <- true
 	return nil
 }
 
 // Neat trick to consistently handling error
 func main() {
+
+	flag.Usage = func() { usage() }
+	disableWebServer = flag.Bool("disable-webserver", false, "Disable built-in webserver.")
+
+	flag.Parse()
+
 	err := realmain()
 	if err != nil {
 		log.Println(err)
