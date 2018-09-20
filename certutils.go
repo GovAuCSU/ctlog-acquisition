@@ -54,8 +54,9 @@ func cleanAndValidateHostname(name string) bool {
 		return false
 	}
 
-	// The following check alone should be sufficient, but by pre-filtering the
-	// above we can log more interesting potential hostnames.
+	// The following check alone should be sufficient, but the line above
+	// should be faster as well as allow us to more easily log invalid
+	// names for review.
 	if _, err := publicsuffix.EffectiveTLDPlusOne(name); err != nil {
 		return false
 	}
