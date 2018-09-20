@@ -123,7 +123,7 @@ func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, del
 	log.Println("[INFO] Starting Scheduler")
 	for {
 		GetLogToFile(ctx, confcomm, filepath)
-		if *startCurrent || *onePass {
+		if *onePass {
 			return
 		}
 		select {
@@ -192,7 +192,7 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 
 	if *startCurrent {
 		confcomm.update <- ep
-		return
+		epconf.Tree_size = ep.Tree_size
 	}
 
 	if epconf.Tree_size < ep.Tree_size {
@@ -254,8 +254,8 @@ func main() {
 	flag.Usage = func() { usage() }
 	disableWebServer = flag.Bool("disable-webserver", false, "Disable built-in webserver.")
 	var DisableAPICertValidation = flag.Bool("disable-cert-validation", false, "Disable validation of CT log API endpoint x.509 certificates (not retrieved certificates).")
-	startCurrent = flag.Bool("start-current", false, "Set current CT log record numbers as starting point in the config. This enables only tracking certificates going forward.")
-	onePass = flag.Bool("one-pass", false, "Collect logs once and exit.")
+	startCurrent = flag.Bool("start-current", false, "Set current CT log record numbers as starting point in the config. This enables only processing newly added certificates.")
+	onePass = flag.Bool("one-pass", false, "Process CT logs until current and exit.")
 	flag.Parse()
 
 	ctl.DisableAPICertValidation = *DisableAPICertValidation
