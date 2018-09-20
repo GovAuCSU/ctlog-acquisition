@@ -22,6 +22,8 @@ const PAGESIZE = 300
 const CONFIGFILE = "config.json"
 
 var disableWebServer *bool
+var startCurrent *bool
+var onePass *bool
 
 func usage() {
 	fmt.Println("Usage: " + os.Args[0] + " [options]")
@@ -70,11 +72,12 @@ type ConfigChannel struct {
 
 func loadConfig(filename string) *Configuration {
 	// If no configuration is found, return empty config
-	if _, err := os.Stat("filename"); os.IsNotExist(err) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return &Configuration{
 			Endpoints: make(map[string]ctl.Endpoint),
 		}
 	}
+
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Println("Exiting app due to Error in reading configuration file.")
@@ -114,20 +117,19 @@ func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
 	}
 }
 
-func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) chan bool {
-	stop := make(chan bool)
-	go func() {
-		for {
-			GetLogToFile(ctx, confcomm, filepath)
-			stop := make(chan bool)
-			select {
-			case <-time.After(delay):
-			case <-stop:
-				return
-			}
+// Scheduler query CT logs every 'delay' unless intializing or making a single pass
+func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) {
+
+	log.Println("[INFO] Starting Scheduler")
+	for {
+		GetLogToFile(ctx, confcomm, filepath)
+		if *startCurrent || *onePass {
+			return
 		}
-	}()
-	return stop
+		select {
+		case <-time.After(delay):
+		}
+	}
 }
 
 func GetLogToFile(ctx context.Context, confcomm ConfigChannel, filepath string) {
@@ -184,8 +186,14 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 		query: ep.Url,
 		reply: make(chan ctl.Endpoint),
 	}
+
 	confcomm.request <- comm
 	epconf := <-comm.reply
+
+	if *startCurrent {
+		confcomm.update <- ep
+		return
+	}
 
 	if epconf.Tree_size < ep.Tree_size {
 		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size, PAGESIZE)
@@ -211,7 +219,7 @@ func realmain() error {
 	// variables
 	localpath := "./static"
 	ctx, cancel := context.WithCancel(context.Background())
-	// defering canclation of all concurence processes
+	// defering cancellation of all concurrent processes
 	defer cancel()
 	os.MkdirAll(localpath, os.ModePerm)
 	confcomm := ConfigChannel{
@@ -221,18 +229,22 @@ func realmain() error {
 
 	go ManageConfiguration(ctx, confcomm)
 
-	stopLog := Scheduler(ctx, confcomm, localpath, 300*time.Second)
-
 	if !*disableWebServer {
 		fs := http.FileServer(http.Dir(localpath))
 		http.Handle("/", fs)
 
 		log.Printf("[INFO] Listening on port %v", listenPort)
-		http.ListenAndServe(listenPort, nil)
+		go http.ListenAndServe(listenPort, nil)
 	} else {
 		log.Println("[INFO] Webserver disabled.")
 	}
-	stopLog <- true
+
+	if ctl.DisableAPICertValidation {
+		log.Println("[INFO] CT Log API certificate validation disabled.")
+	}
+
+	Scheduler(ctx, confcomm, localpath, 300*time.Second)
+
 	return nil
 }
 
@@ -241,8 +253,12 @@ func main() {
 
 	flag.Usage = func() { usage() }
 	disableWebServer = flag.Bool("disable-webserver", false, "Disable built-in webserver.")
-
+	var DisableAPICertValidation = flag.Bool("disable-cert-validation", false, "Disable validation of CT log API endpoint x.509 certificates (not retrieved certificates).")
+	startCurrent = flag.Bool("start-current", false, "Set current CT log record numbers as starting point in the config. This enables only tracking certificates going forward.")
+	onePass = flag.Bool("one-pass", false, "Collect logs once and exit.")
 	flag.Parse()
+
+	ctl.DisableAPICertValidation = *DisableAPICertValidation
 
 	err := realmain()
 	if err != nil {
