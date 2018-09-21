@@ -14,12 +14,14 @@ import (
 	"time"
 
 	ctl "github.com/GovAuCSU/ctlog-acquisition"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/hashicorp/logutils"
 )
 
 const listenPort = ":3000"
 const PAGESIZE = 300
 const CONFIGFILE = "config.json"
+const nameCacheSize = 8192
 
 var disableWebServer *bool
 var startCurrent *bool
@@ -38,6 +40,7 @@ func usage() {
 
 // WriteChanToWriter will read strings from channel c and write to Writer w.
 func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
+	nameCache, _ := lru.New(nameCacheSize)
 	for {
 		select {
 		case <-ctx.Done():
@@ -48,7 +51,10 @@ func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "%s\n", s)
+			if !nameCache.Contains(s) {
+				fmt.Fprintf(w, "%s\n", s)
+				nameCache.Add(s, nil)
+			}
 		}
 	}
 }
