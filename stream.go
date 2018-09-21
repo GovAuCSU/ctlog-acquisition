@@ -31,11 +31,11 @@ func Newendpoint(path string) (*Endpoint, error) {
 	infourl := PROTOCOL + path + INFOURI
 	downloadurl := PROTOCOL + path + DOWNLOADURI
 
-	var tr = &http.Transport{
+	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
 	}
 
-	var httpclient = http.Client{
+	httpclient := http.Client{
 		Timeout:   time.Second * 10, // Timeout after 10 secs timeout
 		Transport: tr,
 	}
