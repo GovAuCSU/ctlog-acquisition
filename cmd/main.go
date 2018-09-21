@@ -286,6 +286,7 @@ func increaseOpenFilesLimit() {
 		err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 		if err != nil {
 			log.Println("[ERROR] Error while changing max open file descriptors: ", err)
+			return
 		}
 		log.Printf("[INFO] Changed max open file descriptors from %d (%d) to %d (%d)", origLimit.Cur, origLimit.Max, rLimit.Cur, rLimit.Max)
 
