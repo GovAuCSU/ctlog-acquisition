@@ -27,18 +27,18 @@ type Endpoint struct {
 	Tree_head_signature string `json:"tree_head_signature"`
 }
 
+var tr = &http.Transport{
+	TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
+}
+
+var httpclient = http.Client{
+	Timeout:   time.Second * 10, // Timeout after 10 secs timeout
+	Transport: tr,
+}
+
 func Newendpoint(path string) (*Endpoint, error) {
 	infourl := PROTOCOL + path + INFOURI
 	downloadurl := PROTOCOL + path + DOWNLOADURI
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
-	}
-
-	httpclient := http.Client{
-		Timeout:   time.Second * 10, // Timeout after 10 secs timeout
-		Transport: tr,
-	}
 
 	resp, err := httpclient.Get(infourl)
 	if err != nil {
@@ -64,15 +64,7 @@ func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (in
 	if size <= 0 {
 		return 0, fmt.Errorf("[ERROR] StreamLog : End should be larger than start")
 	}
-	// Using http.Client so we can modify timeout value
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
-	}
 
-	httpclient := http.Client{
-		Timeout:   time.Second * 10, // Timeout after 30 secs timeout
-		Transport: tr,
-	}
 	t := end
 	if start+pagesize < end {
 		t = start + pagesize
