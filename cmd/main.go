@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,8 +17,24 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
+const listenPort = ":3000"
 const PAGESIZE = 300
 const CONFIGFILE = "config.json"
+
+var disableWebServer *bool
+var startCurrent *bool
+var onePass *bool
+
+func usage() {
+	fmt.Println("Usage: " + os.Args[0] + " [options]")
+	fmt.Println("")
+	fmt.Println("Connects to public CT logs, downloads records, and extracts potential hostnames.")
+	fmt.Println("")
+	fmt.Println("Results are accessible via the file system or a built-in web server on port " + listenPort)
+	fmt.Println("")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
+}
 
 // WriteChanToWriter will read strings from channel c and write to Writer w.
 func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
@@ -55,11 +72,12 @@ type ConfigChannel struct {
 
 func loadConfig(filename string) *Configuration {
 	// If no configuration is found, return empty config
-	if _, err := os.Stat("filename"); os.IsNotExist(err) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return &Configuration{
 			Endpoints: make(map[string]ctl.Endpoint),
 		}
 	}
+
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Println("Exiting app due to Error in reading configuration file.")
@@ -99,20 +117,23 @@ func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
 	}
 }
 
-func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) chan bool {
-	stop := make(chan bool)
-	go func() {
-		for {
-			GetLogToFile(ctx, confcomm, filepath)
-			stop := make(chan bool)
-			select {
-			case <-time.After(delay):
-			case <-stop:
-				return
-			}
+// Scheduler query CT logs every 'delay' unless intializing or making a single pass
+func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) {
+
+	log.Println("[INFO] Starting Scheduler")
+	for {
+		GetLogToFile(ctx, confcomm, filepath)
+		if *onePass {
+			return
 		}
-	}()
-	return stop
+
+		// At this point the config values should be set correctly. Setting
+		// startCurrent to false will stop this from happening every loop.
+		*startCurrent = false
+		select {
+		case <-time.After(delay):
+		}
+	}
 }
 
 func GetLogToFile(ctx context.Context, confcomm ConfigChannel, filepath string) {
@@ -169,8 +190,14 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 		query: ep.Url,
 		reply: make(chan ctl.Endpoint),
 	}
+
 	confcomm.request <- comm
 	epconf := <-comm.reply
+
+	if *startCurrent {
+		confcomm.update <- ep
+		epconf.Tree_size = ep.Tree_size
+	}
 
 	if epconf.Tree_size < ep.Tree_size {
 		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size, PAGESIZE)
@@ -196,7 +223,7 @@ func realmain() error {
 	// variables
 	localpath := "./static"
 	ctx, cancel := context.WithCancel(context.Background())
-	// defering canclation of all concurence processes
+	// defering cancellation of all concurrent processes
 	defer cancel()
 	os.MkdirAll(localpath, os.ModePerm)
 	confcomm := ConfigChannel{
@@ -206,19 +233,37 @@ func realmain() error {
 
 	go ManageConfiguration(ctx, confcomm)
 
-	stopLog := Scheduler(ctx, confcomm, localpath, 300*time.Second)
+	if !*disableWebServer {
+		fs := http.FileServer(http.Dir(localpath))
+		http.Handle("/", fs)
 
-	fs := http.FileServer(http.Dir(localpath))
-	http.Handle("/", fs)
+		log.Printf("[INFO] Listening on port %v", listenPort)
+		go http.ListenAndServe(listenPort, nil)
+	} else {
+		log.Println("[INFO] Webserver disabled.")
+	}
 
-	log.Println("[INFO] Listening...")
-	http.ListenAndServe(":3000", nil)
-	stopLog <- true
+	if ctl.DisableAPICertValidation {
+		log.Println("[INFO] CT Log API certificate validation disabled.")
+	}
+
+	Scheduler(ctx, confcomm, localpath, 300*time.Second)
+
 	return nil
 }
 
 // Neat trick to consistently handling error
 func main() {
+
+	flag.Usage = func() { usage() }
+	disableWebServer = flag.Bool("disable-webserver", false, "Disable built-in webserver.")
+	var DisableAPICertValidation = flag.Bool("disable-cert-validation", false, "Disable validation of CT log API endpoint x.509 certificates (not retrieved certificates).")
+	startCurrent = flag.Bool("start-current", false, "Set current CT log record numbers as starting point in the config. This enables only processing newly added certificates.")
+	onePass = flag.Bool("one-pass", false, "Process CT logs until current and exit.")
+	flag.Parse()
+
+	ctl.DisableAPICertValidation = *DisableAPICertValidation
+
 	err := realmain()
 	if err != nil {
 		log.Println(err)

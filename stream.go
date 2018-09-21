@@ -1,6 +1,7 @@
 package ctlogacquisition
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,6 +13,9 @@ import (
 const PROTOCOL = "https://"
 const INFOURI = "ct/v1/get-sth"
 const DOWNLOADURI = "ct/v1/get-entries"
+
+// Determines if certificates should be validated when downloading from Log API endpoints
+var DisableAPICertValidation bool = true
 
 type Endpoint struct {
 	Url                 string `json:url`
@@ -27,8 +31,13 @@ func Newendpoint(path string) (*Endpoint, error) {
 	infourl := PROTOCOL + path + INFOURI
 	downloadurl := PROTOCOL + path + DOWNLOADURI
 
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
+	}
+
 	httpclient := http.Client{
-		Timeout: time.Second * 10, // Timeout after 10 secs timeout
+		Timeout:   time.Second * 10, // Timeout after 10 secs timeout
+		Transport: tr,
 	}
 
 	resp, err := httpclient.Get(infourl)
@@ -56,8 +65,13 @@ func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (in
 		return 0, fmt.Errorf("[ERROR] StreamLog : End should be larger than start")
 	}
 	// Using http.Client so we can modify timeout value
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: DisableAPICertValidation},
+	}
+
 	httpclient := http.Client{
-		Timeout: time.Second * 10, // Timeout after 30 secs timeout
+		Timeout:   time.Second * 10, // Timeout after 30 secs timeout
+		Transport: tr,
 	}
 	t := end
 	if start+pagesize < end {
