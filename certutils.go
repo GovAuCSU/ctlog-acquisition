@@ -35,7 +35,7 @@ var stripTrailing = []string{
 }
 
 // cleanAndValidateHostname sanity check hostname values
-func cleanAndValidateHostname(name string) bool {
+func cleanAndValidateHostname(name string) (string, bool) {
 
 	// Attempt to salvage names with certain prefixes and suffixes
 	name = strings.ToLower(name)
@@ -51,17 +51,17 @@ func cleanAndValidateHostname(name string) bool {
 	name = strings.TrimSpace(name)
 
 	if name == "" || strings.Contains(name, " ") || strings.Contains(name, ":") {
-		return false
+		return "", false
 	}
 
 	// The following check alone should be sufficient, but the line above
 	// should be faster as well as allow us to more easily log invalid
 	// names for review.
 	if _, err := publicsuffix.EffectiveTLDPlusOne(name); err != nil {
-		return false
+		return "", false
 	}
 
-	return true
+	return name, true
 }
 
 // getDomainFromLeaf read the base64 encoded leaf_entry coming from CT log server and decode+extract CN and SNA from it
@@ -88,12 +88,12 @@ func getDomainFromLeaf(leafentrystr string) ([]string, error) {
 	}
 	var domainlist []string
 	for _, name := range x509cert.DNSNames {
-		if cleanAndValidateHostname(name) {
+		if name, ok := cleanAndValidateHostname(name); ok {
 			domainlist = append(domainlist, name)
 		}
 	}
-	if cleanAndValidateHostname(x509cert.Subject.CommonName) {
-		domainlist = append(domainlist, x509cert.Subject.CommonName)
+	if name, ok := cleanAndValidateHostname(x509cert.Subject.CommonName); ok {
+		domainlist = append(domainlist, name)
 	}
 	return domainlist, nil
 }
