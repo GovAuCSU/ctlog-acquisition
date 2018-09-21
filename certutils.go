@@ -3,11 +3,66 @@ package ctlogacquisition
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	ct "github.com/google/certificate-transparency-go"
 	"github.com/google/certificate-transparency-go/tls"
 	"github.com/google/certificate-transparency-go/x509"
+	"golang.org/x/net/publicsuffix"
 )
+
+var stripLeading = []string{
+	"*.",
+	"[",
+	"cn=",
+	"san=",
+	"dns=",
+	"dns name=",
+	"name=",
+	"=",
+	"-",
+	"?",
+	".",
+}
+
+var stripTrailing = []string{
+	".",
+	"]",
+	"?",
+	"#",
+	"\\",
+	"\"",
+}
+
+// cleanAndValidateHostname sanity check hostname values
+func cleanAndValidateHostname(name string) bool {
+
+	// Attempt to salvage names with certain prefixes and suffixes
+	name = strings.ToLower(name)
+	for _, item := range stripLeading {
+		name = strings.TrimPrefix(name, item)
+	}
+
+	for _, item := range stripTrailing {
+		name = strings.TrimSuffix(name, item)
+	}
+
+	name = strings.Replace(name, "..", ".", -1)
+	name = strings.TrimSpace(name)
+
+	if name == "" || strings.Contains(name, " ") || strings.Contains(name, ":") {
+		return false
+	}
+
+	// The following check alone should be sufficient, but the line above
+	// should be faster as well as allow us to more easily log invalid
+	// names for review.
+	if _, err := publicsuffix.EffectiveTLDPlusOne(name); err != nil {
+		return false
+	}
+
+	return true
+}
 
 // getDomainFromLeaf read the base64 encoded leaf_entry coming from CT log server and decode+extract CN and SNA from it
 func getDomainFromLeaf(leafentrystr string) ([]string, error) {
@@ -18,7 +73,7 @@ func getDomainFromLeaf(leafentrystr string) ([]string, error) {
 	var leaf ct.MerkleTreeLeaf
 	rest, err := tls.Unmarshal(leafentry, &leaf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal MerkleTreeLeafv: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal MerkleTreeLeaf: %v", err)
 	}
 	if len(rest) > 0 {
 		return nil, fmt.Errorf("trailing data (%d bytes) after MerkleTreeLeaf", len(rest))
@@ -33,8 +88,12 @@ func getDomainFromLeaf(leafentrystr string) ([]string, error) {
 	}
 	var domainlist []string
 	for _, name := range x509cert.DNSNames {
-		domainlist = append(domainlist, name)
+		if cleanAndValidateHostname(name) {
+			domainlist = append(domainlist, name)
+		}
 	}
-	domainlist = append(domainlist, x509cert.Subject.CommonName)
+	if cleanAndValidateHostname(x509cert.Subject.CommonName) {
+		domainlist = append(domainlist, x509cert.Subject.CommonName)
+	}
 	return domainlist, nil
 }
