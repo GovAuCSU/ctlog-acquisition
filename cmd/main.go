@@ -157,7 +157,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	log.Printf("[INFO] Preparing our output file: %s", localfile)
 	f, err := os.OpenFile(localfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		return fmt.Errorf("[ERROR] Fail to open file %s. Error was: %s", localfile, err)
+		return fmt.Errorf("[ERROR] Fail to open file %s. Error: %s", localfile, err)
 	}
 	msg := make(chan string, 1000)
 	go WriteChanToWriter(ctx, f, msg)
