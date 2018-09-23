@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	ctl "github.com/GovAuCSU/ctlog-acquisition"
@@ -252,6 +253,46 @@ func realmain() error {
 	return nil
 }
 
+// increaseOpenFilesLimit ensures that the code has sufficient file descriptors
+// to operate. In current versions of go (1.11 and earlier) DNS requests use
+// one FD per request and, when combined with the HTTP requests, can cause
+// name resolution errors even for servers another goroutine is already connected
+// to.
+func increaseOpenFilesLimit() {
+
+	var minOpenFileLimit = 2048
+	var rLimit syscall.Rlimit
+
+	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Println("[ERROR] Unable to determine max open file descriptors: ", err)
+		return
+	}
+
+	var origLimit = rLimit
+	var updated = false
+
+	if rLimit.Cur < uint64(minOpenFileLimit) {
+		rLimit.Cur = uint64(minOpenFileLimit)
+		updated = true
+	}
+
+	if rLimit.Max < uint64(minOpenFileLimit) {
+		rLimit.Max = uint64(minOpenFileLimit)
+		updated = true
+	}
+
+	if updated {
+		err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+		if err != nil {
+			log.Println("[ERROR] Error while changing max open file descriptors: ", err)
+			return
+		}
+		log.Printf("[INFO] Changed max open file descriptors from %d (%d) to %d (%d)", origLimit.Cur, origLimit.Max, rLimit.Cur, rLimit.Max)
+
+	}
+}
+
 // Neat trick to consistently handling error
 func main() {
 
@@ -263,6 +304,8 @@ func main() {
 	flag.Parse()
 
 	ctl.DisableAPICertValidation = *DisableAPICertValidation
+
+	increaseOpenFilesLimit()
 
 	err := realmain()
 	if err != nil {
