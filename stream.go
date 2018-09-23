@@ -59,24 +59,26 @@ func Newendpoint(path string) (*Endpoint, error) {
 
 }
 
-func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (int, error) {
+// StreamLog connects to the Downloadurl of the specified endpoint, requests
+// the records between start and end (inclusively), extracts the potential
+// hostnames, sends the hostnames down the 'message' channel, and returns
+// the number of log entry records retrieved.
+func (ep *Endpoint) StreamLog(message chan string, start, end int) (int, error) {
 	size := end - start
 	if size <= 0 {
 		return 0, fmt.Errorf("[ERROR] StreamLog : End should be larger than start")
 	}
 
-	t := end
-	if start+pagesize < end {
-		t = start + pagesize
-	}
-	resp, err := httpclient.Get(ep.Downloadurl + fmt.Sprintf("?start=%d&end=%d", start, t))
+	log.Printf("[INFO] Getting log from %s:%d --> %d\n", ep.Downloadurl, start, end)
+	resp, err := httpclient.Get(ep.Downloadurl + fmt.Sprintf("?start=%d&end=%d", start, end))
 	if err != nil {
 		return 0, err
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("[DEBUG] Got wrong status code for %s: %d", ep.Downloadurl, resp.StatusCode)
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		return 0, fmt.Errorf("[DEBUG] Got wrong status code for %s: StatusCode: %d Body: %s", ep.Downloadurl, resp.StatusCode, bodyBytes)
 	}
 
 	var leaves struct {
@@ -108,16 +110,6 @@ func (ep *Endpoint) StreamLog(message chan string, start, end, pagesize int) (in
 		}
 
 	}
-	sumrecord := responselength
-	// If there are still more records,
-	if (responselength < size) && (t < end) {
-		log.Printf("[WARN] Getting more log from %s:%d --> %d with pagesize %d\n", ep.Downloadurl, start+responselength, end, responselength)
-		s, err := ep.StreamLog(message, start+responselength, end, responselength)
-		if err != nil {
-			return sumrecord, err
-		}
-		sumrecord = sumrecord + s
-	}
-	return sumrecord, nil
 
+	return responselength, nil
 }
