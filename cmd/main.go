@@ -202,7 +202,7 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 	// from 0 so if we request the end as ep.Tree_size most logs will return
 	// an error instead of just returning the last record.
 	for epconf.Tree_size < ep.Tree_size-1 {
-		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size)
+		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size-1)
 		if err != nil {
 			log.Println(err)
 		}
