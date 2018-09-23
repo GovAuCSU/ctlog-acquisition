@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -87,14 +88,14 @@ func loadConfig(filename string) *Configuration {
 
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Println("Exiting app due to Error in reading configuration file.")
+		log.Println("[ERROR] Exiting app due to Error in reading configuration file.")
 		panic(err)
 	}
 
 	var c Configuration
 	err = json.Unmarshal(bytes, &c)
 	if err != nil {
-		log.Println("Exiting app due to corrupted configuration file.")
+		log.Println("[ERROR] Exiting app due to corrupted configuration file.")
 		panic(err)
 	}
 
@@ -104,6 +105,7 @@ func loadConfig(filename string) *Configuration {
 func saveConfig(c Configuration, filename string) error {
 	bytes, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
+		log.Printf("[ERROR] Saving configuration file. Error: %s", err)
 		return err
 	}
 
@@ -155,12 +157,14 @@ func GetLogToFile(ctx context.Context, confcomm ConfigChannel, filepath string) 
 
 func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end int, folderpath string) error {
 	// -----------
-	t := time.Now()
-	log.Println("[INFO] Preparing our output file")
-	localfile := fmt.Sprintf("%s/ct_log_%s.txt", folderpath, t.Format("2006_02_01"))
+	t := time.Now().UTC()
+	filename := fmt.Sprintf("ct_log_%s.txt", t.Format("2006.01.02_03.04.05"))
+	localfile := filepath.Join(folderpath, filename)
+
+	log.Printf("[INFO] Preparing our output file: %s", localfile)
 	f, err := os.OpenFile(localfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Printf("[ERROR] Fail to open file %s\n", localfile)
+		return fmt.Errorf("[ERROR] Fail to open file %s. Error: %s", localfile, err)
 	}
 	msg := make(chan string, 1000)
 	go WriteChanToWriter(ctx, f, msg)
@@ -189,7 +193,7 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 	defer wg.Done()
 	ep, err := ctl.Newendpoint(url)
 	if err != nil {
-		log.Printf("[DEBUG] %s\n%v", url, err)
+		log.Printf("[ERROR] %s\n%v", url, err)
 		return
 	}
 
