@@ -19,6 +19,7 @@ import (
 )
 
 const listenPort = ":3000"
+const PAGESIZE = 300
 const CONFIGFILE = "config.json"
 
 var disableWebServer *bool
@@ -199,19 +200,17 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 		epconf.Tree_size = ep.Tree_size
 	}
 
-	// Tree_size is a count of available records but the request is indexed
-	// from 0 so if we request the end as ep.Tree_size most logs will return
-	// an error instead of just returning the last record.
-	for epconf.Tree_size < ep.Tree_size-1 {
-		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size)
+	if epconf.Tree_size < ep.Tree_size {
+		sum, err := ep.StreamLog(message, epconf.Tree_size, ep.Tree_size, PAGESIZE)
 		if err != nil {
 			log.Println(err)
 		}
-		epconf.Tree_size += sum
-		confcomm.update <- &epconf
-	}
+		ep.Tree_size = epconf.Tree_size + sum
 
+	}
+	confcomm.update <- ep
 	log.Printf("[INFO] Closing goroutine for %s\n", url)
+
 }
 
 func realmain() error {
