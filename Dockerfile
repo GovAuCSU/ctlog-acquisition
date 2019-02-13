@@ -14,3 +14,4 @@ COPY --from=builder /go/src/github.com/GovAuCSU/ctlog-acquisition/cmd/cmd /go/bi
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 ENTRYPOINT ["/go/bin/ctlog-acquisition"]
+CMD []
