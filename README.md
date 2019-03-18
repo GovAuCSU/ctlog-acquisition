@@ -13,6 +13,13 @@ Problems and TODO:
 
 #### HOW TO:
 
+To get the code running quickly, try the docker container.  This will start writing the CT logs to a local directory called 'static'.
+
+```
+docker build . -t go-ctlog
+docker run --mount source=static,target=/static go-ctlog -disable-webserver -start-current
+```
+
 To see how the code may work, you can try running 
 ```
 go get github.com/GovAuCSU/ctlog-acquisition 
