@@ -184,6 +184,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	}
 
 	wg.Wait()
+	f.Close()
 	return nil
 }
 
