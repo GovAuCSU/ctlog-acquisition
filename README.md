@@ -1,8 +1,8 @@
 #### ctlog-acquisition
 
-NOTE: This code is very much work in progress and should not be used at all until further notice.
+NOTE: This code is a work in progress and should not be used in production.  Pull requests and issues are most welcome.
 
-A golang application built to assist project Rapid7 - Project Sonar
+A golang application to pull Certificate Transparency logs
 
 Problems and TODO:
 
