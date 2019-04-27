@@ -13,17 +13,17 @@ Problems and TODO:
 
 #### HOW TO:
 
-To get the code running quickly, try the docker container.  This will start writing the CT logs to a local directory called 'static'.
+To get the code running quickly, try the docker container.  This will start writing the CT logs to a local directory called 'ct_logs'. NOTE - it takes a while before writing any data to the created files.
 
 ```
-docker run --mount source=static,target=/static 2ajpekr8/ctlog-acquisition -disable-webserver -start-current
+docker run -it --rm --v /ct_logs:/static 2ajpekr8/ctlog-acquisition -disable-webserver -start-current
 ```
 
 or to build it yourself!
 
 ```
 docker build . -t go-ctlog
-docker run --mount source=static,target=/static go-ctlog -disable-webserver -start-current
+docker run -it --rm --v /ct_logs:/static go-ctlog -disable-webserver -start-current
 ```
 
 To see how the code may work, you can try running 
