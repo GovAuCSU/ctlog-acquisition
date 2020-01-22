@@ -166,6 +166,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	if err != nil {
 		return fmt.Errorf("[ERROR] Fail to open file %s. Error: %s", localfile, err)
 	}
+	defer f.Close()
 	msg := make(chan string, 1000)
 	go WriteChanToWriter(ctx, f, msg)
 
