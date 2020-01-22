@@ -120,7 +120,10 @@ func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
 			req.reply <- conf.Endpoints[req.query]
 		case u := <-comm.update:
 			conf.Endpoints[u.Url] = *u
-			saveConfig(*conf, CONFIGFILE)
+			err := saveConfig(*conf, CONFIGFILE)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
@@ -138,9 +141,7 @@ func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, del
 		// At this point the config values should be set correctly. Setting
 		// startCurrent to false will stop this from happening every loop.
 		*startCurrent = false
-		select {
-		case <-time.After(delay):
-		}
+		 func() { time.After(delay) }()
 	}
 }
 
@@ -161,7 +162,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	localfile := filepath.Join(folderpath, filename)
 
 	log.Printf("[INFO] Preparing our output file: %s", localfile)
-	f, err := os.OpenFile(localfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(localfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("[ERROR] Fail to open file %s. Error: %s", localfile, err)
 	}
@@ -184,6 +185,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	}
 
 	wg.Wait()
+	f.Close()
 	return nil
 }
 
@@ -237,7 +239,10 @@ func realmain() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	// defering cancellation of all concurrent processes
 	defer cancel()
-	os.MkdirAll(localpath, os.ModePerm)
+	err := os.MkdirAll(localpath, os.ModePerm)
+	if err != nil {
+		log.Println(err)
+	}
 	confcomm := ConfigChannel{
 		request: make(chan *ConfigComm),
 		update:  make(chan *ctl.Endpoint),

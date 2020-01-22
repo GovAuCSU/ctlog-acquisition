@@ -48,7 +48,7 @@ func Newendpoint(path string) (*Endpoint, error) {
 	body, err := ioutil.ReadAll(resp.Body)
 	var ep Endpoint
 	ep.Url = path
-	json.Unmarshal([]byte(body), &ep)
+	err = json.Unmarshal([]byte(body), &ep)
 	if err != nil {
 		return nil, err
 	}

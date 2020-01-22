@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-// GOLANG tips: if your json
-type stream struct {
-	url     string
-	min     int
-	max     int
-	current int
-	count   int
-}
-
 type ctlist struct {
 	Logs      []ctlistendpoint `json:"logs"`
 	Operators []operator       `json:"operators"`
@@ -48,7 +39,7 @@ func GetListCT() (*ctlist, error) {
 	body, err := ioutil.ReadAll(resp.Body)
 
 	var list ctlist
-	json.Unmarshal([]byte(body), &list)
+	err = json.Unmarshal([]byte(body), &list)
 	if err != nil {
 		return nil, err
 	}
