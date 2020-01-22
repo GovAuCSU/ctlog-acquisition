@@ -186,7 +186,10 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	}
 
 	wg.Wait()
-	f.Close()
+	err = f.Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
