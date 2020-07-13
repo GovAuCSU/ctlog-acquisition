@@ -15,6 +15,7 @@ type ctlistendpoint struct {
 	Description         string `json:"description"`
 	Key                 string `json:"key"`
 	Url                 string `json:"url"`
+	Disqualified        int    `json:"disqualified_at"`
 	Maximum_merge_delay int    `json:"maximum_merge_delay"`
 	Operated_by         []int  `json:"operated_by"`
 }

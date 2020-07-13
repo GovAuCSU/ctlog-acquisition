@@ -21,7 +21,7 @@ import (
 )
 
 const listenPort = ":3000"
-const CONFIGFILE = "config.json"
+const configFile = "config.json"
 const nameCacheSize = 8192
 
 var disableWebServer *bool
@@ -63,24 +63,24 @@ func WriteChanToWriter(ctx context.Context, w io.Writer, c chan string) {
 // Using this struct to send comm between goroutines to get/update endpoint configurations
 // The go routine send a request along with a reply channel so our ManageConfig routine know
 // how to reply
-type ConfigComm struct {
+type configComm struct {
 	query string
 	reply chan ctl.Endpoint
 }
 
-type Configuration struct {
+type configuration struct {
 	Endpoints map[string]ctl.Endpoint
 }
 
-type ConfigChannel struct {
-	request chan *ConfigComm
+type configChannel struct {
+	request chan *configComm
 	update  chan *ctl.Endpoint
 }
 
-func loadConfig(filename string) *Configuration {
+func loadConfig(filename string) *configuration {
 	// If no configuration is found, return empty config
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		return &Configuration{
+		return &configuration{
 			Endpoints: make(map[string]ctl.Endpoint),
 		}
 	}
@@ -91,7 +91,7 @@ func loadConfig(filename string) *Configuration {
 		panic(err)
 	}
 
-	var c Configuration
+	var c configuration
 	err = json.Unmarshal(bytes, &c)
 	if err != nil {
 		log.Println("[ERROR] Exiting app due to corrupted configuration file.")
@@ -101,7 +101,7 @@ func loadConfig(filename string) *Configuration {
 	return &c
 }
 
-func saveConfig(c Configuration, filename string) error {
+func saveConfig(c configuration, filename string) error {
 	bytes, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		log.Printf("[ERROR] Saving configuration file. Error: %s", err)
@@ -111,8 +111,8 @@ func saveConfig(c Configuration, filename string) error {
 	return ioutil.WriteFile(filename, bytes, 0644)
 }
 
-func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
-	conf := loadConfig(CONFIGFILE)
+func manageConfiguration(ctx context.Context, comm configChannel) {
+	conf := loadConfig(configFile)
 	// Load config
 	for {
 		select {
@@ -120,7 +120,7 @@ func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
 			req.reply <- conf.Endpoints[req.query]
 		case u := <-comm.update:
 			conf.Endpoints[u.Url] = *u
-			err := saveConfig(*conf, CONFIGFILE)
+			err := saveConfig(*conf, configFile)
 			if err != nil {
 				log.Println(err)
 			}
@@ -129,11 +129,11 @@ func ManageConfiguration(ctx context.Context, comm ConfigChannel) {
 }
 
 // Scheduler query CT logs every 'delay' unless intializing or making a single pass
-func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, delay time.Duration) {
+func Scheduler(ctx context.Context, confcomm configChannel, filepath string, delay time.Duration) {
 
 	log.Println("[INFO] Starting Scheduler")
 	for {
-		GetLogToFile(ctx, confcomm, filepath)
+		getLogToFile(ctx, confcomm, filepath)
 		if *onePass {
 			return
 		}
@@ -141,21 +141,21 @@ func Scheduler(ctx context.Context, confcomm ConfigChannel, filepath string, del
 		// At this point the config values should be set correctly. Setting
 		// startCurrent to false will stop this from happening every loop.
 		*startCurrent = false
-		 func() { time.After(delay) }()
+		func() { time.After(delay) }()
 	}
 }
 
-func GetLogToFile(ctx context.Context, confcomm ConfigChannel, filepath string) {
+func getLogToFile(ctx context.Context, confcomm configChannel, filepath string) {
 	start := 1000
 	end := 2000
-	err := RealGetLogToFile(ctx, confcomm, start, end, filepath)
+	err := realGetLogToFile(ctx, confcomm, start, end, filepath)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 }
 
-func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end int, folderpath string) error {
+func realGetLogToFile(ctx context.Context, confcomm configChannel, start, end int, folderpath string) error {
 	// -----------
 	t := time.Now().UTC()
 	filename := fmt.Sprintf("ct_log_%s.txt", t.Format("2006.01.02_03.04.05"))
@@ -181,8 +181,11 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 
 	// Starting one thread per CT Log api endpoint
 	for _, l := range ctlist.Logs {
+		if l.Disqualified > 0 {
+			continue
+		}
 		wg.Add(1)
-		go GetLog(msg, confcomm, l.Url, start, end, &wg)
+		go getLog(msg, confcomm, l.Url, start, end, &wg)
 	}
 
 	wg.Wait()
@@ -193,7 +196,7 @@ func RealGetLogToFile(ctx context.Context, confcomm ConfigChannel, start, end in
 	return nil
 }
 
-func GetLog(message chan string, confcomm ConfigChannel, url string, start, end int, wg *sync.WaitGroup) {
+func getLog(message chan string, confcomm configChannel, url string, start, end int, wg *sync.WaitGroup) {
 	log.Printf("[INFO] Starting request for %s\n", url)
 	defer wg.Done()
 	ep, err := ctl.Newendpoint(url)
@@ -202,7 +205,7 @@ func GetLog(message chan string, confcomm ConfigChannel, url string, start, end 
 		return
 	}
 
-	comm := &ConfigComm{
+	comm := &configComm{
 		query: ep.Url,
 		reply: make(chan ctl.Endpoint),
 	}
@@ -247,12 +250,12 @@ func realmain() error {
 	if err != nil {
 		log.Println(err)
 	}
-	confcomm := ConfigChannel{
-		request: make(chan *ConfigComm),
+	confcomm := configChannel{
+		request: make(chan *configComm),
 		update:  make(chan *ctl.Endpoint),
 	}
 
-	go ManageConfiguration(ctx, confcomm)
+	go manageConfiguration(ctx, confcomm)
 
 	if !*disableWebServer {
 		fs := http.FileServer(http.Dir(localpath))
