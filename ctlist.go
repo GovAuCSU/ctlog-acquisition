@@ -26,7 +26,7 @@ type operator struct {
 }
 
 func GetListCT() (*ctlist, error) {
-	url := "https://www.gstatic.com/ct/log_list/log_list.json"
+	url := "https://www.gstatic.com/ct/log_list/v3/log_list.json"
 	// Using http.Client so we can modify timeout value
 	httpclient := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs timeout
