@@ -8,25 +8,22 @@ import (
 )
 
 type ctlist struct {
-	Logs      []ctlistendpoint `json:"logs"`
 	Operators []operator       `json:"operators"`
 }
 type ctlistendpoint struct {
 	Description         string `json:"description"`
 	Key                 string `json:"key"`
 	Url                 string `json:"url"`
-	Disqualified        int    `json:"disqualified_at"`
-	Maximum_merge_delay int    `json:"maximum_merge_delay"`
-	Operated_by         []int  `json:"operated_by"`
 }
 
 type operator struct {
 	Name string `json:"name"`
 	Id   int    `json:"id"`
+	Logs []ctlistendpoint `json:"logs"`
 }
 
 func GetListCT() (*ctlist, error) {
-	url := "https://www.gstatic.com/ct/log_list/log_list.json"
+	url := "https://www.gstatic.com/ct/log_list/v3/log_list.json"
 	// Using http.Client so we can modify timeout value
 	httpclient := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs timeout
