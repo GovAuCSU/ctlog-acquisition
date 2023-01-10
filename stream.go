@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-const PROTOCOL = "https://"
 const INFOURI = "ct/v1/get-sth"
 const DOWNLOADURI = "ct/v1/get-entries"
 
@@ -37,8 +36,8 @@ var httpclient = http.Client{
 }
 
 func Newendpoint(path string) (*Endpoint, error) {
-	infourl := PROTOCOL + path + INFOURI
-	downloadurl := PROTOCOL + path + DOWNLOADURI
+	infourl := path + INFOURI
+	downloadurl := path + DOWNLOADURI
 
 	resp, err := httpclient.Get(infourl)
 	if err != nil {

@@ -179,13 +179,14 @@ func realGetLogToFile(ctx context.Context, confcomm configChannel, start, end in
 	_ = ctlist
 	var wg sync.WaitGroup
 
-	// Starting one thread per CT Log api endpoint
-	for _, l := range ctlist.Logs {
-		if l.Disqualified > 0 {
-			continue
+	// Starting one thread per CT Operator/Log api endpoint
+	for _, operator := range ctlist.Operators {
+		log.Printf("[INFO] Acquiring logs for Operator: %s\n", operator.Name)
+
+		for _, log := range operator.Logs {
+			wg.Add(1)
+			go getLog(msg, confcomm, log.Url, start, end, &wg)
 		}
-		wg.Add(1)
-		go getLog(msg, confcomm, l.Url, start, end, &wg)
 	}
 
 	wg.Wait()
